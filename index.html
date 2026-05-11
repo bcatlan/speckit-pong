@@ -51,6 +51,14 @@
         <canvas id="gameCanvas" width="800" height="600"></canvas>
     </div>
 
+    <!-- ARIA live region for screen reader announcements -->
+    <div id="screenReaderAnnouncement"
+         role="status"
+         aria-live="polite"
+         aria-atomic="true"
+         style="position: absolute; left: -10000px; width: 1px; height: 1px;">
+    </div>
+
     <script>
     'use strict';
 
@@ -138,6 +146,26 @@
                 TARGET_FPS: 60,
                 LOW_FPS_THRESHOLD: 58,
                 LOW_FPS_FRAME_COUNT_TRIGGER: 60
+            },
+
+            // Leaderboard configuration
+            LEADERBOARD: {
+                HEADER_FONT: 'bold 32px "Courier New"',
+                RESULT_FONT: 'bold 56px "Courier New"',
+                SCORE_LABEL_FONT: '28px "Courier New"',
+                SCORE_VALUE_FONT: 'bold 48px "Courier New"',
+                INSTRUCTION_FONT: '20px "Courier New"',
+
+                WINNER_COLOR: '#7ED321',      // Green for winner
+                LOSER_COLOR: '#AAA',          // Gray for loser
+                NEUTRAL_COLOR: '#FFF',        // White for general text
+                INSTRUCTION_COLOR: '#666',    // Dim gray for instructions
+
+                HEADER_Y: 100,                // Y position for "FINAL SCORE" header
+                RESULT_Y: 160,                // Y position for WIN/LOSE text
+                SCORES_START_Y: 240,          // Y position for first score line
+                SCORE_LINE_SPACING: 60,       // Vertical space between score lines
+                INSTRUCTIONS_START_Y: 500     // Y position for navigation instructions
             }
         };
 
@@ -232,6 +260,9 @@
             // Post-match feedback
             matchFeedback: null,  // null | 'thumbs_up' | 'thumbs_down'
 
+            // Accessibility state
+            lastAnnouncedScreen: null,  // Track last announced screen to prevent duplicates
+
             // Menu music state
             menuMusicPlaying: false,
             menuMusicOscillators: []
@@ -313,6 +344,7 @@
                     e.preventDefault();
                 } else if (e.key === 'Escape' && gameState.currentScreen === 'MATCH_END') {
                     gameState.currentScreen = 'MENU';
+                    gameState.lastAnnouncedScreen = null;  // Reset accessibility state
                     stopMenuMusic();  // Ensure music doesn't play until menu renders
                     e.preventDefault();
                 }
@@ -863,28 +895,59 @@
             ctx.fillText('ESC for menu', GAME_CONFIG.CANVAS_WIDTH / 2, GAME_CONFIG.CANVAS_HEIGHT / 2 + 65);
         }
 
+        /**
+         * Renders the match-end leaderboard overlay with final scores and navigation options.
+         * Displays winner/loser status, both players' scores, feedback buttons, and instructions.
+         * Also triggers screen reader announcement for accessibility.
+         * @requires gameState.currentScreen === 'MATCH_END'
+         * @requires gameState.winner !== null
+         */
         function renderMatchEndOverlay() {
+            const config = GAME_CONFIG.LEADERBOARD;
+
+            // Background overlay
             ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
             ctx.fillRect(0, 0, GAME_CONFIG.CANVAS_WIDTH, GAME_CONFIG.CANVAS_HEIGHT);
 
-            // Result
-            ctx.fillStyle = '#FFF';
-            ctx.font = 'bold 56px "Courier New"';
+            // Header
+            ctx.font = config.HEADER_FONT;
+            ctx.fillStyle = config.NEUTRAL_COLOR;
             ctx.textAlign = 'center';
-            const resultText = gameState.winner === 'player' ? 'YOU WIN!' : 'YOU LOSE';
-            ctx.fillText(resultText, GAME_CONFIG.CANVAS_WIDTH / 2, GAME_CONFIG.CANVAS_HEIGHT / 2 - 80);
+            ctx.fillText('FINAL SCORE', GAME_CONFIG.CANVAS_WIDTH / 2, config.HEADER_Y);
 
-            // Score
-            ctx.font = '36px "Courier New"';
-            ctx.fillText(`${gameState.playerScore} - ${gameState.aiScore}`,
-                        GAME_CONFIG.CANVAS_WIDTH / 2, GAME_CONFIG.CANVAS_HEIGHT / 2 - 20);
+            // Match result
+            ctx.font = config.RESULT_FONT;
+            const resultText = gameState.winner === 'player' ? 'YOU WIN!' : 'YOU LOSE';
+            ctx.fillText(resultText, GAME_CONFIG.CANVAS_WIDTH / 2, config.RESULT_Y);
+
+            // Determine winner colors
+            const playerColor = gameState.winner === 'player' ? config.WINNER_COLOR : config.LOSER_COLOR;
+            const aiColor = gameState.winner === 'ai' ? config.WINNER_COLOR : config.LOSER_COLOR;
+
+            // Player score line
+            ctx.textAlign = 'right';
+            ctx.font = config.SCORE_LABEL_FONT;
+            ctx.fillStyle = playerColor;
+            ctx.fillText('YOU:', 280, config.SCORES_START_Y);
+
+            ctx.font = config.SCORE_VALUE_FONT;
+            ctx.fillText(gameState.playerScore.toString(), 520, config.SCORES_START_Y);
+
+            // AI score line
+            ctx.font = config.SCORE_LABEL_FONT;
+            ctx.fillStyle = aiColor;
+            ctx.fillText('AI:', 280, config.SCORES_START_Y + config.SCORE_LINE_SPACING);
+
+            ctx.font = config.SCORE_VALUE_FONT;
+            ctx.fillText(gameState.aiScore.toString(), 520, config.SCORES_START_Y + config.SCORE_LINE_SPACING);
 
             // Feedback prompt
             ctx.font = '24px "Courier New"';
             ctx.fillStyle = '#AAA';
+            ctx.textAlign = 'center';
             ctx.fillText('How was that match?', GAME_CONFIG.CANVAS_WIDTH / 2, GAME_CONFIG.CANVAS_HEIGHT / 2 + 40);
 
-            // Thumbs buttons
+            // Thumbs buttons (existing functionality preserved)
             const buttonY = GAME_CONFIG.CANVAS_HEIGHT / 2 + 90;
             const thumbsUpX = GAME_CONFIG.CANVAS_WIDTH / 2 - 80;
             const thumbsDownX = GAME_CONFIG.CANVAS_WIDTH / 2 + 20;
@@ -894,6 +957,7 @@
             ctx.fillRect(thumbsUpX - 30, buttonY - 30, 60, 50);
             ctx.fillStyle = '#FFF';
             ctx.font = '32px Arial';
+            ctx.textAlign = 'center';
             ctx.fillText('👍', thumbsUpX, buttonY);
 
             // Thumbs down button
@@ -902,11 +966,33 @@
             ctx.fillStyle = '#FFF';
             ctx.fillText('👎', thumbsDownX, buttonY);
 
-            // Instructions
-            ctx.font = '20px "Courier New"';
-            ctx.fillStyle = '#666';
-            ctx.fillText('SPACE to rematch', GAME_CONFIG.CANVAS_WIDTH / 2, GAME_CONFIG.CANVAS_HEIGHT - 60);
-            ctx.fillText('ESC for menu', GAME_CONFIG.CANVAS_WIDTH / 2, GAME_CONFIG.CANVAS_HEIGHT - 30);
+            // Navigation instructions
+            ctx.font = config.INSTRUCTION_FONT;
+            ctx.fillStyle = config.INSTRUCTION_COLOR;
+            ctx.fillText('SPACE to rematch', GAME_CONFIG.CANVAS_WIDTH / 2, config.INSTRUCTIONS_START_Y);
+            ctx.fillText('ESC for menu', GAME_CONFIG.CANVAS_WIDTH / 2, config.INSTRUCTIONS_START_Y + 30);
+
+            // Accessibility announcement
+            announceMatchEnd();
+        }
+
+        /**
+         * Announces match result to screen readers via ARIA live region.
+         * Prevents duplicate announcements by checking lastAnnouncedScreen state.
+         */
+        function announceMatchEnd() {
+            if (gameState.currentScreen !== 'MATCH_END' || gameState.lastAnnouncedScreen === 'MATCH_END') {
+                return;
+            }
+
+            const announcement = document.getElementById('screenReaderAnnouncement');
+            if (!announcement) return;
+
+            const resultText = gameState.winner === 'player' ? 'You win' : 'You lose';
+            const message = `Match ended. ${resultText} ${gameState.playerScore} to ${gameState.aiScore}. Press space to play again or escape for menu.`;
+
+            announcement.textContent = message;
+            gameState.lastAnnouncedScreen = 'MATCH_END';
         }
 
         // ========================================================================
@@ -1010,6 +1096,7 @@
             gameState.matchFeedback = null;
             gameState.ballTrailEnabled = true;
             gameState.lowFpsFrameCount = 0;
+            gameState.lastAnnouncedScreen = null;  // Reset accessibility state
 
             resetPaddles();
             resetBall(true);  // Player serves first

@@ -1,0 +1,16 @@
+{
+  "name": "speckit-pong",
+  "version": "1.0.0",
+  "description": "Classic Pong game with match-end leaderboard",
+  "main": "index.html",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "jest": "^30.4.0",
+    "jest-canvas-mock": "^2.5.2",
+    "jest-environment-jsdom": "^30.4.0"
+  }
+}

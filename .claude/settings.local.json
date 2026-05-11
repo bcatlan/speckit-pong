@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.specify/extensions/git/scripts/bash/auto-commit.sh after_constitution *)",
+      "Bash(.specify/extensions/git/scripts/bash/create-new-feature.sh *)",
+      "Bash(.specify/scripts/bash/setup-plan.sh *)",
+      "Bash(.specify/scripts/bash/setup-tasks.sh *)",
+      "Bash(.specify/scripts/bash/check-prerequisites.sh *)",
+      "Bash(npm install *)",
+      "Bash(npm test *)",
+      "Bash(python3 *)",
+      "Bash(node -c /home/ubuntu/projects/speckit-pong/index.html)"
+    ]
+  }
+}
